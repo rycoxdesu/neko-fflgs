@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.nekos.fastflagssaver",
-    "productName": "Neko's FastFlags Saver",
+    "productName": "NekoFF",
     "directories": {
       "output": "dist"
     },
@@ -25,7 +25,9 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "cute2.ico"
+      "icon": "cute2.ico",
+      "artifactName": "nekofflgs.exe"
     }
-  }
+  },
+  "dependencies": {}
 }
