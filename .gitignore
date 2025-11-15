@@ -19,3 +19,15 @@ release/
 build/
 *.nib
 *.crdownload
+
+build_helper.bat
+index.html
+cute2.ico
+index.html
+loading.html
+main.js
+portable-config.json
+preload.js
+renderer.js
+style.css
+BUILDING.md

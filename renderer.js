@@ -12,14 +12,83 @@ document.addEventListener('DOMContentLoaded', async () => {
   setTimeout(async () => {
     try {
       const updateResult = await window.electronAPI.checkForUpdates();
-      // Only show update notification if update is available and user chose to update
-      if (updateResult.updateAvailable && updateResult.action === 0) {
-        // User chose to update now, already handled in main process
+
+      // Show update modal if update is available
+      if (updateResult.updateAvailable) {
+        // Add a small delay to ensure UI is fully loaded
+        setTimeout(() => {
+          showUpdateModal(updateResult);
+        }, 1000);
       }
     } catch (error) {
       console.error('Error checking for updates:', error);
     }
   }, 3000); // Delay check by 3 seconds to not slow app startup
+
+  // Function to show update modal
+  function showUpdateModal(updateInfo) {
+    // Only show modal if we have valid version information
+    if (!updateInfo.currentVersion || !updateInfo.latestVersion) {
+      console.warn('Update info missing version data:', updateInfo);
+      return;
+    }
+
+    // Remove any existing modals
+    const existingModal = document.querySelector('.update-modal');
+    if (existingModal) existingModal.remove();
+
+    // Create modal HTML
+    const modal = document.createElement('div');
+    modal.className = 'update-modal';
+    modal.innerHTML = `
+      <div class="update-modal-content">
+        <div class="update-modal-header">
+          <h2>🚀 New Update Available!</h2>
+          <span class="update-modal-close">&times;</span>
+        </div>
+        <div class="update-modal-body">
+          <p><strong>Current Version:</strong> ${updateInfo.currentVersion}</p>
+          <p><strong>Latest Version:</strong> ${updateInfo.latestVersion}</p>
+          ${updateInfo.releaseNotes ? `<p><strong>Release Notes:</strong> ${updateInfo.releaseNotes}</p>` : ''}
+          <p>Would you like to update now?</p>
+        </div>
+        <div class="update-modal-footer">
+          <button id="updateNowBtn" class="update-btn primary-btn">Update Now</button>
+          <button id="updateLaterBtn" class="update-btn secondary-btn">Later</button>
+        </div>
+      </div>
+    `;
+
+    // Add modal to page
+    document.body.appendChild(modal);
+
+    // Close modal function
+    const closeModal = () => modal.remove();
+
+    // Event listeners
+    modal.querySelector('.update-modal-close').addEventListener('click', closeModal);
+    modal.querySelector('#updateLaterBtn').addEventListener('click', closeModal);
+    modal.querySelector('#updateNowBtn').addEventListener('click', () => {
+      if (updateInfo.downloadUrl) {
+        window.electronAPI.openExternal(updateInfo.downloadUrl);
+      }
+      closeModal();
+    });
+
+    // Prevent closing when clicking inside the modal content or backdrop
+    // Modal will only close when user clicks X, Later, or Update Now buttons
+    modal.addEventListener('click', (e) => {
+      // Do nothing when clicking on backdrop - modal won't close
+    });
+
+    // Prevent closing when clicking inside the modal content
+    const modalContent = modal.querySelector('.update-modal-content');
+    if (modalContent) {
+      modalContent.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent event from bubbling
+      });
+    }
+  }
 
   // Load existing Roblox settings when the page loads (fully automatic)
   try {

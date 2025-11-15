@@ -94,7 +94,7 @@ ipcMain.handle('read-clipboard', async () => {
     }
 });
 
-// Function to check for updates
+// Function to check for updates using GitHub API only
 function checkForUpdates() {
     return new Promise((resolve, reject) => {
         // Load current app version from package.json
@@ -102,13 +102,13 @@ function checkForUpdates() {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         const currentVersion = packageJson.version;
 
-        // Check for latest version from GitHub
         const options = {
             hostname: 'api.github.com',
             path: '/repos/rycoxdesu/neko-fastflags-roblox/releases/latest',
             method: 'GET',
             headers: {
-                'User-Agent': 'Neko-FastFlags-App'
+                'User-Agent': 'Neko-FastFlags-App',
+                'Accept': 'application/vnd.github.v3+json'
             }
         };
 
@@ -120,13 +120,19 @@ function checkForUpdates() {
             res.on('end', () => {
                 try {
                     const release = JSON.parse(data);
+                    // Check if release and tag_name exist
+                    if (!release || !release.tag_name) {
+                        reject(new Error('Invalid response from GitHub API'));
+                        return;
+                    }
+
                     const latestVersion = release.tag_name.startsWith('v') ? release.tag_name.substring(1) : release.tag_name;
 
                     resolve({
                         updateAvailable: compareVersions(latestVersion, currentVersion) > 0,
                         currentVersion: currentVersion,
                         latestVersion: latestVersion,
-                        downloadUrl: release.assets.length > 0 ? release.assets[0].browser_download_url : null,
+                        downloadUrl: release.assets && release.assets.length > 0 ? release.assets[0].browser_download_url : null,
                         releaseNotes: release.body || ''
                     });
                 } catch (error) {
@@ -159,29 +165,25 @@ function compareVersions(v1, v2) {
     return 0;
 }
 
+// IPC handler for opening external URLs
+ipcMain.handle('open-external', async (event, url) => {
+    const { shell } = require('electron');
+    await shell.openExternal(url);
+});
+
 // IPC handler to check for updates
 ipcMain.handle('check-for-updates', async () => {
     try {
         const updateInfo = await checkForUpdates();
         if (updateInfo.updateAvailable) {
-            // Show update dialog
-            const result = dialog.showMessageBoxSync(mainWindow, {
-                type: 'info',
-                title: 'Update Available',
-                message: `A new version is available: ${updateInfo.latestVersion}\nCurrent version: ${updateInfo.currentVersion}`,
-                detail: updateInfo.releaseNotes,
-                buttons: ['Update Now', 'Skip', 'Remind Me Later'],
-                defaultId: 0,
-                cancelId: 1
-            });
-
-            // 0 = Update Now, 1 = Skip, 2 = Remind Me Later
-            if (result === 0 && updateInfo.downloadUrl) {
-                // Open download page in default browser
-                require('electron').shell.openExternal(updateInfo.downloadUrl);
-            }
-
-            return { updateAvailable: updateInfo.updateAvailable, action: result };
+            // Return update info without showing dialog (renderer will handle modal)
+            return {
+                updateAvailable: updateInfo.updateAvailable,
+                currentVersion: updateInfo.currentVersion,
+                latestVersion: updateInfo.latestVersion,
+                downloadUrl: updateInfo.downloadUrl,
+                releaseNotes: updateInfo.releaseNotes || ''
+            };
         } else {
             return { updateAvailable: false };
         }
