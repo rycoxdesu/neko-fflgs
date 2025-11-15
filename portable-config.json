@@ -1,0 +1,26 @@
+{
+  "appId": "com.nekos.fastflagssaver",
+  "productName": "Neko's FastFlags Saver",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "**/*",
+    "!node_modules/**/*",
+    "!*.map",
+    "!*.log",
+    "!BUILDING.md",
+    "!README.md",
+    "!portable-config.json",
+    "!.gitignore"
+  ],
+  "win": {
+    "target": "portable",
+    "icon": "cute2.ico",
+    "publisherName": "Neko's Circle"
+  },
+  "portable": {
+    "artifactName": "${productName}_Portable.${ext}",
+    "requestExecutionLevel": "user"
+  }
+}

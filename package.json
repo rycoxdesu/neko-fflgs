@@ -1,0 +1,31 @@
+{
+  "name": "nekos",
+  "version": "1.0.0",
+  "description": "Neko's FastFlags Saver",
+  "main": "main.js",
+  "author": "Neko's Circle",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:portable": "electron-builder --config portable-config.json",
+    "dist:all": "npm run dist && npm run dist:portable"
+  },
+  "devDependencies": {
+    "electron": "^26.2.0",
+    "electron-builder": "^24.6.0"
+  },
+  "build": {
+    "appId": "com.nekos.fastflagssaver",
+    "productName": "Neko's FastFlags Saver",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "cute2.ico"
+    }
+  }
+}
