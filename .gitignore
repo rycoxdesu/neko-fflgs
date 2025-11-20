@@ -30,6 +30,11 @@ build/
 # Temporary
 temp/
 tmp/
+release_notes_example.txt
+debug.txt
+build_helper.bat
+BUILDING.md
+cute2.ico
 
 # --- RAHASIAKAN SOURCE CODE ---
 *.js
