@@ -1,0 +1,655 @@
+﻿#NoEnv
+#SingleInstance Force
+SetBatchLines, -1
+CoordMode, Pixel, Screen
+CoordMode, Mouse, Screen
+
+; =========================
+; VALIDASI LISENSI OTOMATIS + GUI + HEARTBEAT + VERSION CHECK
+; =========================
+
+ClientVersion := "v2.5"  ; versi client saat ini, ubah kalau rilis baru v2
+
+; --- Ambil HWID PC ---
+objWMI := ComObjGet("winmgmts:\\.\root\cimv2")
+colItems := objWMI.ExecQuery("Select * from Win32_ComputerSystemProduct")
+HWID := ""
+for item in colItems {
+    HWID := item.UUID
+    break
+}
+StringReplace, HWID, HWID, `{, , All
+StringReplace, HWID, HWID, `}, , All
+HWID := Trim(HWID)
+
+; --- Request ke API untuk validasi + kirim versi client ---
+url := "https://nekocircle.me/validate/" . HWID . "?version=" . ClientVersion
+http := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+http.Open("GET", url, false)
+http.SetRequestHeader("Accept", "application/json")
+http.Send()
+status := http.Status
+response := http.ResponseText
+
+; --- Parse JSON ---
+ParsedStatus := ""
+ParsedMessage := ""
+IsLifetime := false
+ParsedMessageIP := ""  ; default unknown
+ParsedMode := ""       ; default mode
+UpgradeRequired := false
+MinVersion := ""
+DownloadURL := ""
+
+; Periksa apakah respons JSON valid
+if response =
+{
+    MsgBox, 16, Error, Tidak ada respons dari server. Periksa koneksi internet Anda.
+    ExitApp
+}
+
+; Parse JSON dengan ekspresi regular yang lebih spesifik - perbaikan escape karakter
+if RegExMatch(response, Chr(34) . "status" . Chr(34) . "\s*:\s*" . Chr(34) . "([^" . Chr(34) . "]*)" . Chr(34), m)
+    ParsedStatus := m1
+if RegExMatch(response, Chr(34) . "message" . Chr(34) . "\s*:\s*" . Chr(34) . "([^" . Chr(34) . "]*)" . Chr(34), m)
+    ParsedMessage := m1
+if RegExMatch(response, Chr(34) . "mode" . Chr(34) . "\s*:\s*" . Chr(34) . "([^" . Chr(34) . "]*)" . Chr(34), m)
+    ParsedMode := m1
+if RegExMatch(response, Chr(34) . "isLifetime" . Chr(34) . "\s*:\s*(true|false)", m)
+    IsLifetime := (m1 = "true")
+if RegExMatch(response, Chr(34) . "upgradeRequired" . Chr(34) . "\s*:\s*(true|false)", m)
+    UpgradeRequired := (m1 = "true")
+if RegExMatch(response, Chr(34) . "minVersion" . Chr(34) . "\s*:\s*" . Chr(34) . "([^" . Chr(34) . "]*)" . Chr(34), m)
+    MinVersion := m1
+if RegExMatch(response, Chr(34) . "ip" . Chr(34) . "\s*:\s*(\" . Chr(34) . "([^" . Chr(34) . "]*)" . Chr(34) . "|null)", m) {
+    if (m2 != "")
+        ParsedMessageIP := m2
+}
+
+if (ParsedMessageIP = "" || ParsedMessageIP = "null") {
+    ParsedMessageIP := "neko's"
+} else if (SubStr(ParsedMessageIP,1,7)="::ffff:") {
+    ParsedMessageIP := SubStr(ParsedMessageIP,8)
+}
+
+; =========================
+; CEK LISENSI + CEK VERSION
+; =========================
+if (UpgradeRequired) {
+    MsgText := "❌ Versi lama terdeteksi!" . "`nSilakan download versi terbaru (" . MinVersion . ")."
+    MsgBox, 16, Upgrade Required, %MsgText%
+    ExitApp
+}
+
+; Tambahkan logging untuk debugging
+; FileAppend, % "Status: " . ParsedStatus . ", Mode: " . ParsedMode . ", Message: " . ParsedMessage . "`n", debug.log
+
+; --- Tambahan untuk mode unregistered ---
+if (data.mode = "unregistered") {
+    msg := "❌ HWID belum terdaftar!" . "`n"
+    msg .= "Silakan daftar lisensi di bot Discord terlebih dahulu."
+    MsgBox, 48, Lisensi Tidak Ditemukan, %msg%
+    return
+}
+
+if (ParsedStatus = "ok") {
+    MsgText := "✅ Lisensi Valid!" . "`n"
+    MsgText .= "───────────────────────────────`n"
+
+    if (ParsedMode = "lifetime") {
+        MsgText .= "🎉 Mode       : Lifetime Access`n"
+    } else if (ParsedMode = "premium") {
+        MsgText .= "🌟 Mode       : Premium`n"
+    } else if (ParsedMode = "trial") {
+        MsgText .= "🚀 Mode       : Booster`n"
+    } else if (ParsedMode = "custom" || ParsedMode = "custom_trial") {
+        MsgText .= "✨ Mode       : Trial`n"
+    } else if (ParsedMode = "pending") {
+        MsgText .= "⏳ Mode       : Pending Activation`n"
+    } else if (ParsedMode = "expired") {
+        MsgText .= "⏰ Mode       : License Expired`n"
+    } else if (ParsedMode = "removed") {
+        MsgText .= "❌ Mode       : User Removed`n"
+    } else {
+        MsgText .= "ℹ️ Mode       : Unknown`n"
+    }
+
+    CleanIP := ParsedMessageIP
+    if (SubStr(CleanIP, 1, 7) = "::ffff:")
+        CleanIP := SubStr(CleanIP, 8)
+
+    MsgText .= "🌐 Server IP  : " . (CleanIP ? CleanIP : "Unknown") . "`n"
+    MsgText .= "───────────────────────────────`n"
+    MsgText .= "🪪 HWID       : " . HWID . "`n"
+    MsgText .= "📅 Client Ver : " . ClientVersion . "`n"
+
+    MsgBox, 64, ✅ Lisensi Aktif, %MsgText%
+
+} else if (ParsedStatus = "error") {
+    MsgText := "❌ Lisensi Error!" . "`n"
+    MsgText .= "───────────────────────────────`n"
+    MsgText .= "📋 Info       : " . ParsedMessage . "`n"
+
+    if (ParsedMode = "expired") {
+        MsgText .= "⏰ Status     : Lisensi Kadaluarsa`n"
+    } else if (ParsedMode = "removed") {
+        MsgText .= "❌ Status     : User Tidak Terdaftar`n"
+    } else if (ParsedMode = "pending") {
+        MsgText .= "⏳ Status     : HWID Belum Diaktifkan`n"
+    }
+
+    MsgText .= "───────────────────────────────`n"
+    MsgBox, 16, ⚠️ Lisensi Tidak Valid, %MsgText%
+    ExitApp
+
+} else {
+    MsgText := "❌ Respons Tidak Valid dari Server!" . "`n"
+    MsgText .= "───────────────────────────────`n"
+    MsgText .= "📡 Status     : " . ParsedStatus . "`n"
+    MsgText .= "📋 Info       : " . ParsedMessage . "`n"
+    MsgText .= "🔍 Mode       : " . ParsedMode . "`n"
+    MsgText .= "───────────────────────────────`n"
+
+    MsgBox, 16, ❌ Kesalahan Server, %MsgText%
+    ExitApp
+}
+
+
+; =========================
+; FILE SETTINGS
+; =========================
+SettingsFile := A_ScriptDir "\Settings.ini"
+
+; =========================
+; DEFAULT SETTINGS
+; =========================
+BodyColor := 0xD6599A  ; default purple
+ColorName := "Purple"   ; default color name
+Tolerance := 8
+DebounceInterval := 150
+StabilizationLoops := 5
+NonRedBuffer := 10
+AdaptiveFactor := 0.5
+TriggerBotKey := "Not Set"
+CurveKey := "Not Set"
+CurveOffsetX := 999
+CurveOffsetY := 0
+CurveReturnX := -360
+CurveReturnY := 0
+Fov := 30  ; fixed field of view
+
+; =========================
+; LOAD SETTINGS
+; =========================
+if FileExist(SettingsFile)
+{
+    IniRead, DebounceInterval, %SettingsFile%, Timing, DebounceInterval, 100
+    IniRead, StabilizationLoops, %SettingsFile%, Timing, StabilizationLoops, 5
+    IniRead, Tolerance, %SettingsFile%, Timing, Tolerance, 75
+    IniRead, ColorName, %SettingsFile%, Color, BodyColor, Purple
+
+    ; 🔹 Fix: pastikan BodyColor sesuai dengan ColorName yang di-load
+    ColorNameToHex(ColorName)
+
+    IniRead, CurveOffsetX, %SettingsFile%, Curve, OffsetX, 999
+    IniRead, CurveOffsetY, %SettingsFile%, Curve, OffsetY, 0
+    IniRead, CurveReturnX, %SettingsFile%, Curve, ReturnX, -360
+    IniRead, CurveReturnY, %SettingsFile%, Curve, ReturnY, 0
+}
+
+
+; =========================
+; CONVERT COLORNAME TO HEX
+; =========================
+ColorNameToHex(ColorName)
+{
+    global BodyColor
+    if (ColorName = "Purple")
+        BodyColor := 0xD6599A
+    else if (ColorName = "Pink")
+        BodyColor := 0x961899
+    else if (ColorName = "Yellow")
+        BodyColor := 0x42CAD0
+    else if (ColorName = "Blue")
+        BodyColor := 0xa82828
+    else if (ColorName = "Red")
+        BodyColor := 0x6063E5
+    else if (ColorName = "Green")
+        BodyColor := 0x007F00
+    else if (ColorName = "Cyan")
+        BodyColor := 0xCBCF55
+}
+ColorNameToHex(ColorName)
+
+; =========================
+; CREATE / RAPIKAN GUI (AHK v1, responsive)
+; =========================
+Gui, +Resize +AlwaysOnTop +LastFound +OwnDialogs
+Gui, Color, White
+Gui, Font, s10 c000000, Segoe UI
+
+; =========================
+; LAYOUT SETTINGS
+; =========================
+LeftWidth := 220      ; lebar kolom kiri (Color)
+RightWidth := 350     ; lebar kolom kanan (Timing/Curve/Action Keys)
+Spacing := 1          ; space kosong di antara kiri & kanan
+GuiWidth := LeftWidth + Spacing + RightWidth + 20  ; 20 = margin ekstra kanan
+GuiHeight := 470      ; tinggi total GUI - diperbesar agar semua elemen terlihat
+
+Menu, Tray, Tip, Neko's
+Menu, Tray, Icon  ; hilangkan icon tray default (bisa ganti icon custom nanti)
+
+; =========================
+; LEFT COLUMN: SELECT COLOR
+; =========================
+Gui, Add, GroupBox, x10 y10 w220 h270, 🎨 SELECT COLOR
+
+Gui, Add, Radio, x20 y40  w200 vColorPurple gSetBodyColor, ⤷ 🟣 Purple ➜ (#7F00FF)
+Gui, Add, Radio, x20 y75  w200 vColorPink   gSetBodyColor, ⤷ 🌸 Pink ➜ (#FF00FF)
+Gui, Add, Radio, x20 y110 w200 vColorYellow gSetBodyColor, ⤷ 💛 Yellow ➜ (#FFFF00)
+Gui, Add, Radio, x20 y145 w200 vColorBlue   gSetBodyColor, ⤷ 🔵 Blue ➜ (#0000FF)
+Gui, Add, Radio, x20 y180 w200 vColorRed    gSetBodyColor, ⤷ 🔴 Red ➜ (#FF0000)
+Gui, Add, Radio, x20 y215 w200 vColorGreen  gSetBodyColor, ⤷ 🟢 Green ➜ (#00FF00)
+Gui, Add, Radio, x20 y250 w200 vColorCyan   gSetBodyColor, ⤷ 🟦 Cyan ➜ (#00FFFF)
+
+; =========================
+; RIGHT COLUMN: TIMING SETTINGS
+; =========================
+Gui, Add, GroupBox, x250 y10 w330 h130, ⏱️ TIMING SETTINGS
+
+Gui, Add, Text, x260 y40 w150 h20, Debounce ➜ (50-200)
+Gui, Add, Edit, x410 y40 w150 h20 vEditDebounce, %DebounceInterval%
+
+Gui, Add, Text, x260 y70 w150 h20, Stabilization ➜ (3-6)
+Gui, Add, Edit, x410 y70 w150 h20 vEditLoops, %StabilizationLoops%
+
+Gui, Add, Text, x260 y100 w150 h20, Tolerance ➜ (1-10)
+Gui, Add, Edit, x410 y100 w150 h20 vEditTolerance, %Tolerance%
+
+; =========================
+; RIGHT COLUMN: CURVE SETTINGS
+; =========================
+Gui, Add, GroupBox, x250 y150 w330 h100, 🎯 CURVE SETTINGS
+
+Gui, Add, Text, x260 y180 w150 h20, Offset X ➜
+Gui, Add, Edit, x410 y180 w150 h20 vCurveOffsetX, %CurveOffsetX%
+
+Gui, Add, Text, x260 y210 w150 h20, Return X ➜
+Gui, Add, Edit, x410 y210 w150 h20 vCurveReturnX, %CurveReturnX%
+
+
+; =========================
+; ACTION KEYS (TINGGI BOX 170 - POSISI PAS)
+; =========================
+Gui, Add, GroupBox, x250 y270 w330 h170, 🎮 ACTION KEYS
+
+; --- Baris 1 tombol ---
+Gui, Add, Button, x260 y295 w140 h35 vBtnSetTrigger gSetTriggerBotKey, 🐾 TRIGGER KEY
+Gui, Add, Button, x430 y295 w140 h35 vBtnSetCurve   gSetCurveKey,     🎯 CURVE KEY
+
+; --- Baris 2 tombol ---
+Gui, Add, Button, x345 y340 w140 h35 vBtnSaveStart gSaveAndStart, 💾 SAVE / START
+
+; --- Baris 3 tombol ---
+Gui, Add, Button, x260 y385 w140 h35 gOpenServer,   🌐 DISCORD 🐰
+Gui, Add, Button, x430 y385 w140 h35 gOpenSupport,  💬 DUKUNGAN 🌸
+
+
+; =========================
+; TRIGGER & CURVE KEY DISPLAY (left)
+; =========================
+Gui, Add, GroupBox, x10 y310 w220 h60, 🔑 TRIGGER KEY
+Gui, Add, Text, x20 y340 w200 h25 vTriggerBotKeyLabel, ➜ %TriggerBotKey%
+
+Gui, Add, GroupBox, x10 y380 w220 h60, 🔑 CURVE KEY
+Gui, Add, Text, x20 y410 w200 h25 vCurveKeyLabel, ➜ %CurveKey%
+
+; =========================
+; COPYRIGHT (right bawah)
+; =========================
+Gui, Font, s10 c808080 Bold, Segoe UI
+Gui, Add, Text, x0 y445 w600 h20 Center, © 2025 Made by Neko's. All Rights Reserved.
+
+; =========================
+; SHOW GUI
+; =========================
+Gui, Show, w%GuiWidth% h%GuiHeight%, Neko's TriggerBot Bot
+
+; =========================
+; SET RADIO BUTTON SESUAI SETTINGS
+; =========================
+SetColorRadio(ColorName)
+
+SetColorRadio(Name) {
+    GuiControl,, ColorPurple, % (Name = "Purple" ? "1" : "0")
+    GuiControl,, ColorPink,   % (Name = "Pink"   ? "1" : "0")
+    GuiControl,, ColorYellow, % (Name = "Yellow" ? "1" : "0")
+    GuiControl,, ColorBlue,   % (Name = "Blue"   ? "1" : "0")
+    GuiControl,, ColorRed,    % (Name = "Red"    ? "1" : "0")
+    GuiControl,, ColorGreen,  % (Name = "Green"  ? "1" : "0")
+    GuiControl,, ColorCyan,   % (Name = "Cyan"   ? "1" : "0")
+}
+
+; =========================
+; GANTI ICON CUSTOM (Hilangkan logo H)
+; =========================
+WinWait, Neko's TriggerBot Bot
+hWnd := WinExist("Neko's TriggerBot Bot")
+IconPath := A_ScriptDir "\cute2.ico"
+if FileExist(IconPath)
+{
+    hIcon := DllCall("LoadImage", "UInt", 0, "Str", IconPath, "UInt", 1, "Int", 0, "Int", 0, "UInt", 0x10)
+    SendMessage, 0x80, 0, hIcon,, ahk_id %hWnd%
+    SendMessage, 0x80, 1, hIcon,, ahk_id %hWnd%
+}
+
+; =========================
+; HEARTBEAT + AUTO OFFLINE
+; =========================
+OnExit, ExitHandler  ; Auto offline saat exit
+SetTimer, HeartbeatTimer, 30000  ; Heartbeat tiap 30 detik
+
+; --- Kirim heartbeat pertama setelah GUI muncul ---
+SendHeartbeat()
+Return
+
+ExitHandler:
+    SendOffline()
+    ExitApp
+Return
+
+SendOffline() {
+    global HWID
+    urlOffline := "https://nekocircle.me//offline"
+    http := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+    http.Open("POST", urlOffline, false)
+    http.SetRequestHeader("Content-Type", "application/json")
+    http.Send("{""hwid"":""" HWID """}")
+}
+
+SendHeartbeat() {
+    global HWID
+    try {
+        httpHB := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+        httpHB.Open("POST", "https://nekocircle.me//heartbeat", false)
+        httpHB.SetRequestHeader("Content-Type", "application/json")
+        httpHB.Send("{""hwid"":""" HWID """}")
+    } catch {}
+}
+HeartbeatTimer:
+    SendHeartbeat()
+Return
+
+; =========================
+; HANDLER UNTUK BUTTON
+; =========================
+OpenServer:
+    Run, https://discord.gg/4GbyqWPjUe
+Return
+
+OpenSupport:
+    Run, https://sociabuzz.com/nekos/tribe
+Return
+
+; =========================
+; GUI HANDLERS
+; =========================
+SetBodyColor:
+Gui, Submit, NoHide
+if (ColorPurple) {
+    BodyColor := 0xD6599A
+    ColorName := "Purple"
+}
+else if (ColorPink) {
+    BodyColor := 0x961899
+    ColorName := "Pink"
+}
+else if (ColorYellow) {
+    BodyColor := 0x42CAD0
+    ColorName := "Yellow"
+}
+else if (ColorBlue) {
+    BodyColor := 0xa82828
+    ColorName := "Blue"
+}
+else if (ColorRed) {
+    BodyColor := 0x6063E5
+    ColorName := "Red"
+}
+else if (ColorGreen) {
+    BodyColor := 0x007F00
+    ColorName := "Green"
+}
+else if (ColorCyan) {
+    BodyColor := 0xCBCF55
+    ColorName := "Cyan"
+}
+Return
+
+; =========================
+; SET TRIGGER BOT KEY
+; =========================
+SetTriggerBotKey:
+Gui, Submit, NoHide
+ToolTip, Tekan tombol keyboard atau mouse (XButton1/XButton2)...
+Sleep, 300
+UserKey := ""
+Loop {
+    MouseKeys := ["MButton","XButton1","XButton2"]
+    for index, k in MouseKeys {
+        if GetKeyState(k,"P") {
+            UserKey := k
+            break
+        }
+    }
+    if (UserKey = "") {
+        Input, kbKey, L1 M T0.05
+        if (kbKey != "")
+            UserKey := kbKey
+    }
+    if (UserKey != "")
+        break
+    Sleep, 10
+}
+ToolTip
+; =========================
+; SAFE SET TRIGGER KEY (no error)
+; =========================
+if (TriggerBotKey != "" && TriggerBotKey != "Not Set") {
+    try Hotkey, *~%TriggerBotKey%, Off
+}
+
+TriggerBotKey := UserKey
+GuiControl,, TriggerBotKeyLabel, ➜ %TriggerBotKey%
+
+; aktifkan hotkey baru hanya kalau loop sudah mulai nanti
+try Hotkey, *~%TriggerBotKey%, Off
+
+Return
+
+; =========================
+; SET CURVE KEY
+; =========================
+SetCurveKey:
+Gui, Submit, NoHide
+ToolTip, Tekan tombol keyboard atau mouse (XButton1/XButton2) untuk Curve...
+Sleep, 300
+UserKey := ""
+Loop {
+    MouseKeys := ["MButton","XButton1","XButton2"]
+    for index, k in MouseKeys {
+        if GetKeyState(k,"P") {
+            UserKey := k
+            break
+        }
+    }
+    if (UserKey = "") {
+        Input, kbKey, L1 M T0.05
+        if (kbKey != "")
+            UserKey := kbKey
+    }
+    if (UserKey != "")
+        break
+    Sleep, 10
+}
+ToolTip
+; =========================
+; SAFE SET CURVE KEY (no error)
+; =========================
+if (CurveKey != "" && CurveKey != "Not Set") {
+    try Hotkey, *~%CurveKey%, Off
+}
+
+CurveKey := UserKey
+GuiControl,, CurveKeyLabel, ➜ %CurveKey%
+
+; aktifkan hotkey baru dengan proteksi error
+try Hotkey, *~%CurveKey%, StartCurve, On
+Return
+
+Return
+
+; =========================
+; SAVE SETTINGS & START LOOP
+; =========================
+SaveAndStart:
+Gui, Submit, NoHide
+DebounceInterval := EditDebounce
+StabilizationLoops := EditLoops
+Tolerance := EditTolerance
+; Fov is fixed to 30, so we don't update it from GUI
+SaveSettings()
+Gosub, StartLoop
+Return
+
+; =========================
+; SAVE SETTINGS FUNCTION
+; =========================
+SaveSettings()
+{
+    global DebounceInterval, StabilizationLoops, Tolerance, ColorName, SettingsFile
+    global CurveOffsetX, CurveOffsetY, CurveReturnX, CurveReturnY
+    IniWrite, %DebounceInterval%, %SettingsFile%, Timing, DebounceInterval
+    IniWrite, %StabilizationLoops%, %SettingsFile%, Timing, StabilizationLoops
+    IniWrite, %Tolerance%, %SettingsFile%, Timing, Tolerance
+    IniWrite, %ColorName%, %SettingsFile%, Color, BodyColor
+    IniWrite, %CurveOffsetX%, %SettingsFile%, Curve, OffsetX
+    IniWrite, %CurveOffsetY%, %SettingsFile%, Curve, OffsetY
+    IniWrite, %CurveReturnX%, %SettingsFile%, Curve, ReturnX
+    IniWrite, %CurveReturnY%, %SettingsFile%, Curve, ReturnY
+}
+
+StartCurve:
+    Gui, Submit, NoHide
+
+    ; Hitung 10% offset ke atas
+    OffsetUp := CurveOffsetY * 0.1
+    MouseMove, %CurveOffsetX%, % CurveOffsetY - OffsetUp, 0, R
+    Click
+
+    MouseMove, %CurveReturnX%, %CurveReturnY%, 0, R
+Return
+
+
+
+; =========================
+; Hybrid TriggerBot – Auto Click v16.3 (Stabilized Anti-Double)
+; =========================
+StartLoop:
+Gui, Hide
+
+; =========================
+; INIT
+; =========================
+RedStreak := 0
+LastTriggerState := false
+CooldownUntil := 0 ; Waktu (A_TickCount) sampai bot bisa klik lagi
+
+; =========================
+; ADAPTASI OTOMATIS
+; =========================
+ScreenWidth := A_ScreenWidth
+ScreenHeight := A_ScreenHeight
+CenterX := ScreenWidth // 2
+CenterY := ScreenHeight // 2
+
+; ===================================================================
+; OPTIMASI: Tambahkan jeda untuk meringankan beban CPU.
+; Nilai 5 adalah awal yang baik. Naikkan jika masih berat (misal: 10).
+SleepTime := 5
+; FOV auto-scale berdasarkan tinggi layar
+if (Fov <= 0)
+    Fov := Floor(ScreenHeight * 0.025)
+
+; Adaptasi toleransi warna
+; if (Tolerance < 6)
+;     Tolerance := 8 ; Dinonaktifkan untuk menghormati setting user, bahkan jika di bawah 6
+
+; =========================
+; MAIN LOOP
+; =========================
+Loop
+{
+    CurrentTriggerState := GetKeyState(TriggerBotKey, "P")
+    CurrentTime := A_TickCount
+    
+    if (CurrentTriggerState)
+    {
+        ; 🔹 Saat tombol baru ditekan
+        if (!LastTriggerState)
+        {
+            RedStreak := 0
+            CooldownUntil := 0 ; Reset cooldown saat tombol baru ditekan
+        }
+
+        ; --- Tentukan area deteksi (FOV) ---
+        TopLeftX     := Max(0, CenterX - Fov)
+        TopLeftY     := Max(0, CenterY - Fov)
+        BottomRightX := Min(ScreenWidth, CenterX + Fov)
+        BottomRightY := Min(ScreenHeight, CenterY + Fov)
+
+        ; --- Cari warna target ---
+        PixelSearch, Px, Py, TopLeftX, TopLeftY, BottomRightX, BottomRightY, %BodyColor%, %Tolerance%, Fast
+        IsTarget := (ErrorLevel = 0)
+
+        ; =========================
+        ; LOGIKA DETEKSI & KLIK
+        ; =========================
+        if (IsTarget)
+        {
+            RedStreak++
+
+            ; Klik hanya jika stabil dan tidak dalam masa cooldown
+            if (RedStreak >= StabilizationLoops && CurrentTime >= CooldownUntil)
+            {
+                Click
+                ; Atur cooldown untuk klik berikutnya, pastikan ada jeda minimal
+                EffectiveDebounce := Max(DebounceInterval, 30) ; Jeda minimal 30ms untuk anti double-click
+                CooldownUntil := CurrentTime + EffectiveDebounce
+                
+                ; Reset RedStreak agar butuh stabilisasi lagi untuk klik berikutnya
+                ; Ini adalah lapisan pertahanan tambahan yang sangat efektif
+                RedStreak := 0 
+            }
+        }
+        else
+        {
+            ; 🎯 Target hilang → reset streak
+            RedStreak := 0
+        }
+    }
+    else
+    {
+        ; 🧹 Tombol dilepas → reset total
+        RedStreak := 0
+    }
+
+    LastTriggerState := CurrentTriggerState
+    Sleep, %SleepTime%
+}
+Return
+
+
+GuiClose:
+~F2::ExitApp

@@ -20,14 +20,26 @@ build/
 *.nib
 *.crdownload
 
-build_helper.bat
-index.html
-cute2.ico
-index.html
-loading.html
-main.js
-portable-config.json
-preload.js
-renderer.js
-style.css
-BUILDING.md
+
+# Security (PENTING: Jangan dihapus)
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Temporary
+temp/
+tmp/
+
+# --- RAHASIAKAN SOURCE CODE ---
+*.js
+*.html
+*.css
+data/
+
+# Tapi KECUALIKAN file-file ini (Wajib ada di GitHub)
+!package.json
+!package-lock.json
+!.gitignore
+!README.md
+!LICENSE

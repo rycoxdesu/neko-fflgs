@@ -1,9 +1,22 @@
 {
-  "name": "nekos",
-  "version": "0.9.0",
-  "description": "Neko's FastFlags Saver",
+  "name": "nekos-fastflags",
+  "version": "1.1.0",
+  "description": "A utility to manage and apply Roblox FastFlags configurations easily.",
   "main": "main.js",
-  "author": "Neko's Circle",
+  "author": {
+    "name": "Neko's Circle",
+    "email": "support@nekocircle.com",
+    "url": "https://github.com/rycoxdesu"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rycoxdesu/neko-fflgs.git"
+  },
+  "homepage": "https://github.com/rycoxdesu/neko-fflgs#readme",
+  "bugs": {
+    "url": "https://github.com/rycoxdesu/neko-fflgs/issues"
+  },
+  "license": "MIT",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
@@ -16,7 +29,8 @@
   },
   "build": {
     "appId": "com.nekos.fastflagssaver",
-    "productName": "NekoFF",
+    "productName": "Neko FastFlags Saver",
+    "copyright": "Copyright © 2024 Neko's Circle",
     "directories": {
       "output": "dist"
     },
@@ -26,8 +40,26 @@
     "win": {
       "target": "nsis",
       "icon": "cute2.ico",
-      "artifactName": "nekofflgs.exe"
-    }
+      "artifactName": "NekoFastFlags_Setup_${version}.exe",
+      "certificateFile": "neko_cert.pfx",
+      "certificatePassword": "password123",
+      "legalTrademarks": "Neko's Circle",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Neko FastFlags"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "rycoxdesu",
+        "repo": "neko-fflgs"
+      }
+    ]
   },
   "dependencies": {}
 }
