@@ -30,7 +30,7 @@
   "build": {
     "appId": "com.nekos.fastflagssaver",
     "productName": "Neko FastFlags Saver",
-    "copyright": "Copyright © 2024 Neko's Circle",
+    "copyright": "Copyright © 2025 Neko's Circle",
     "directories": {
       "output": "dist"
     },
